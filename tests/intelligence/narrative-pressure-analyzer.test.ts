@@ -8,6 +8,7 @@
  * - Source provenance maintained
  */
 
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   analyzePressure,
   getPressureMap,
@@ -64,78 +65,55 @@ const testAnalysisSource: AnalysisSource = {
   },
 };
 
-function setup() {
-  clearPressureMaps();
-}
+describe('NarrativePressureAnalyzer', () => {
+  beforeEach(() => {
+    clearPressureMaps();
+  });
 
-// --- Tests ---
+  it('pressure map derived from analyses', () => {
+    const spine = createTestSpine();
+    const map = analyzePressure('tl-001', testAnalysisSource, spine);
 
-// Test 1: Pressure map derived from analyses
-function test_pressure_map_from_analyses(): void {
-  setup();
-  const spine = createTestSpine();
-  const map = analyzePressure('tl-001', testAnalysisSource, spine);
+    expect(map.pressure_map_id).toBeDefined();
+    expect(map.timeline_id).toBe('tl-001');
+    expect(map.segments.length).toBe(2);
+  });
 
-  console.assert(map.pressure_map_id !== undefined, 'pressure_map_id should be defined');
-  console.assert(map.timeline_id === 'tl-001', 'timeline_id should match');
-  console.assert(map.segments.length === 2, `expected 2 segments, got ${map.segments.length}`);
-  console.log('PASS: test_pressure_map_from_analyses');
-}
+  it('authoritative is always false', () => {
+    const spine = createTestSpine();
+    const map = analyzePressure('tl-002', testAnalysisSource, spine);
 
-// Test 2: authoritative is always false
-function test_authoritative_always_false(): void {
-  setup();
-  const spine = createTestSpine();
-  const map = analyzePressure('tl-002', testAnalysisSource, spine);
+    expect(map.authoritative).toBe(false);
+  });
 
-  console.assert(map.authoritative === false, 'authoritative must be false (derived, not truth)');
-  console.log('PASS: test_authoritative_always_false');
-}
+  it('contributing factors link to analysis findings', () => {
+    const spine = createTestSpine();
+    const map = analyzePressure('tl-003', testAnalysisSource, spine);
 
-// Test 3: Contributing factors link to analysis findings
-function test_contributing_factors_from_findings(): void {
-  setup();
-  const spine = createTestSpine();
-  const map = analyzePressure('tl-003', testAnalysisSource, spine);
+    const seg1 = map.segments[0];
+    expect(seg1.contributing_factors.length).toBeGreaterThan(0);
+    expect(seg1.contributing_factors).toContain('rapid_cuts');
+  });
 
-  const seg1 = map.segments[0];
-  console.assert(seg1.contributing_factors.length > 0, 'contributing_factors should not be empty');
-  console.assert(seg1.contributing_factors.includes('rapid_cuts'), 'should include rapid_cuts factor');
-  console.log('PASS: test_contributing_factors_from_findings');
-}
+  it('source analysis IDs maintained in segments', () => {
+    const spine = createTestSpine();
+    const map = analyzePressure('tl-004', testAnalysisSource, spine);
 
-// Test 4: Source analysis IDs maintained in segments
-function test_source_analysis_ids_maintained(): void {
-  setup();
-  const spine = createTestSpine();
-  const map = analyzePressure('tl-004', testAnalysisSource, spine);
-
-  for (const seg of map.segments) {
-    console.assert(seg.source_analysis_ids.length > 0, 'source_analysis_ids should not be empty');
-    for (const aid of seg.source_analysis_ids) {
-      console.assert(aid.startsWith('ana-'), `analysis id should start with ana-, got ${aid}`);
+    for (const seg of map.segments) {
+      expect(seg.source_analysis_ids.length).toBeGreaterThan(0);
+      for (const aid of seg.source_analysis_ids) {
+        expect(aid).toMatch(/^ana-/);
+      }
     }
-  }
-  console.log('PASS: test_source_analysis_ids_maintained');
-}
+  });
 
-// Test 5: getPressureMap retrieves stored map
-function test_get_pressure_map(): void {
-  setup();
-  const spine = createTestSpine();
-  const map = analyzePressure('tl-005', testAnalysisSource, spine);
+  it('getPressureMap retrieves stored map', () => {
+    const spine = createTestSpine();
+    const map = analyzePressure('tl-005', testAnalysisSource, spine);
 
-  const retrieved = getPressureMap(map.pressure_map_id);
-  console.assert(retrieved !== undefined, 'retrieved map should be defined');
-  console.assert(retrieved!.pressure_map_id === map.pressure_map_id, 'ids should match');
-  console.assert(retrieved!.authoritative === false, 'authoritative should still be false');
-  console.log('PASS: test_get_pressure_map');
-}
-
-// --- Run all tests ---
-test_pressure_map_from_analyses();
-test_authoritative_always_false();
-test_contributing_factors_from_findings();
-test_source_analysis_ids_maintained();
-test_get_pressure_map();
-console.log('\nAll 5 narrative-pressure-analyzer tests passed.');
+    const retrieved = getPressureMap(map.pressure_map_id);
+    expect(retrieved).toBeDefined();
+    expect(retrieved!.pressure_map_id).toBe(map.pressure_map_id);
+    expect(retrieved!.authoritative).toBe(false);
+  });
+});

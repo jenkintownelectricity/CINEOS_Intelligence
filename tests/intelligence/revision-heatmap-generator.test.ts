@@ -8,6 +8,7 @@
  * - Source mutation_ids preserved
  */
 
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   generateHeatmap,
   getHeatmap,
@@ -34,96 +35,72 @@ const testMutationSource: MutationSource = {
   },
 };
 
-function setup() {
-  clearHeatmaps();
-}
+describe('RevisionHeatmapGenerator', () => {
+  beforeEach(() => {
+    clearHeatmaps();
+  });
 
-// --- Tests ---
+  it('heatmap derived from canonical mutations', () => {
+    const spine = createTestSpine();
+    const heatmap = generateHeatmap('tl-001', 'clip', testMutationSource, spine);
 
-// Test 1: Heatmap derived from canonical mutations
-function test_heatmap_from_canonical_mutations(): void {
-  setup();
-  const spine = createTestSpine();
-  const heatmap = generateHeatmap('tl-001', 'clip', testMutationSource, spine);
+    expect(heatmap.heatmap_id).toBeDefined();
+    expect(heatmap.cells.length).toBe(2);
+    expect(heatmap.source_event_count).toBe(3);
 
-  console.assert(heatmap.heatmap_id !== undefined, 'heatmap_id should be defined');
-  console.assert(heatmap.cells.length === 2, `expected 2 cells (clip-A and clip-B), got ${heatmap.cells.length}`);
-  console.assert(heatmap.source_event_count === 3, 'source_event_count should be 3');
+    const clipA = heatmap.cells.find((c) => c.object_id === 'clip-A');
+    expect(clipA).toBeDefined();
+    expect(clipA!.revision_count).toBe(2);
+  });
 
-  const clipA = heatmap.cells.find((c) => c.object_id === 'clip-A');
-  console.assert(clipA !== undefined, 'clip-A cell should exist');
-  console.assert(clipA!.revision_count === 2, 'clip-A should have 2 revisions');
-  console.log('PASS: test_heatmap_from_canonical_mutations');
-}
+  it('authoritative is always false', () => {
+    const spine = createTestSpine();
+    const heatmap = generateHeatmap('tl-002', 'scene', testMutationSource, spine);
 
-// Test 2: authoritative is always false
-function test_authoritative_always_false(): void {
-  setup();
-  const spine = createTestSpine();
-  const heatmap = generateHeatmap('tl-002', 'scene', testMutationSource, spine);
+    expect(heatmap.authoritative).toBe(false);
+  });
 
-  console.assert(heatmap.authoritative === false, 'authoritative must be false (derived, not truth)');
-  // Verify type-level: the field is typed as `false`, not `boolean`
-  console.log('PASS: test_authoritative_always_false');
-}
+  it('refresh regenerates from canonical sources', () => {
+    const spine = createTestSpine();
+    const original = generateHeatmap('tl-003', 'clip', testMutationSource, spine);
 
-// Test 3: Refresh regenerates from canonical sources
-function test_refresh_regenerates(): void {
-  setup();
-  const spine = createTestSpine();
-  const original = generateHeatmap('tl-003', 'clip', testMutationSource, spine);
+    // Refresh with updated mutation source
+    const updatedSource: MutationSource = {
+      getMutations() {
+        return [
+          { mutation_id: 'mut-001', object_id: 'clip-A', timestamp: '2026-03-16T10:00:00Z' },
+          { mutation_id: 'mut-002', object_id: 'clip-A', timestamp: '2026-03-16T10:05:00Z' },
+          { mutation_id: 'mut-003', object_id: 'clip-B', timestamp: '2026-03-16T10:10:00Z' },
+          { mutation_id: 'mut-004', object_id: 'clip-C', timestamp: '2026-03-16T10:15:00Z' },
+        ];
+      },
+    };
 
-  // Refresh with updated mutation source
-  const updatedSource: MutationSource = {
-    getMutations() {
-      return [
-        { mutation_id: 'mut-001', object_id: 'clip-A', timestamp: '2026-03-16T10:00:00Z' },
-        { mutation_id: 'mut-002', object_id: 'clip-A', timestamp: '2026-03-16T10:05:00Z' },
-        { mutation_id: 'mut-003', object_id: 'clip-B', timestamp: '2026-03-16T10:10:00Z' },
-        { mutation_id: 'mut-004', object_id: 'clip-C', timestamp: '2026-03-16T10:15:00Z' },
-      ];
-    },
-  };
+    const refreshed = refreshHeatmap(original.heatmap_id, updatedSource, spine);
 
-  const refreshed = refreshHeatmap(original.heatmap_id, updatedSource, spine);
+    expect(refreshed.heatmap_id).toBe(original.heatmap_id);
+    expect(refreshed.cells.length).toBe(3);
+    expect(refreshed.source_event_count).toBe(4);
+    expect(refreshed.authoritative).toBe(false);
+  });
 
-  console.assert(refreshed.heatmap_id === original.heatmap_id, 'heatmap_id should be preserved');
-  console.assert(refreshed.cells.length === 3, `expected 3 cells after refresh, got ${refreshed.cells.length}`);
-  console.assert(refreshed.source_event_count === 4, 'source_event_count should be 4');
-  console.assert(refreshed.authoritative === false, 'authoritative should still be false');
-  console.log('PASS: test_refresh_regenerates');
-}
+  it('source mutation_ids preserved in cells', () => {
+    const spine = createTestSpine();
+    const heatmap = generateHeatmap('tl-004', 'clip', testMutationSource, spine);
 
-// Test 4: Source mutation_ids preserved in cells
-function test_source_mutation_ids_preserved(): void {
-  setup();
-  const spine = createTestSpine();
-  const heatmap = generateHeatmap('tl-004', 'clip', testMutationSource, spine);
+    const clipA = heatmap.cells.find((c) => c.object_id === 'clip-A');
+    expect(clipA).toBeDefined();
+    expect(clipA!.source_mutation_ids.length).toBe(2);
+    expect(clipA!.source_mutation_ids).toContain('mut-001');
+    expect(clipA!.source_mutation_ids).toContain('mut-002');
+  });
 
-  const clipA = heatmap.cells.find((c) => c.object_id === 'clip-A');
-  console.assert(clipA !== undefined, 'clip-A should exist');
-  console.assert(clipA!.source_mutation_ids.length === 2, 'clip-A should reference 2 mutations');
-  console.assert(clipA!.source_mutation_ids.includes('mut-001'), 'should include mut-001');
-  console.assert(clipA!.source_mutation_ids.includes('mut-002'), 'should include mut-002');
-  console.log('PASS: test_source_mutation_ids_preserved');
-}
+  it('getHeatmap retrieves stored heatmap', () => {
+    const spine = createTestSpine();
+    const heatmap = generateHeatmap('tl-005', 'track', testMutationSource, spine);
 
-// Test 5: getHeatmap retrieves stored heatmap
-function test_get_heatmap_retrieves(): void {
-  setup();
-  const spine = createTestSpine();
-  const heatmap = generateHeatmap('tl-005', 'track', testMutationSource, spine);
-
-  const retrieved = getHeatmap(heatmap.heatmap_id);
-  console.assert(retrieved !== undefined, 'retrieved heatmap should be defined');
-  console.assert(retrieved!.heatmap_id === heatmap.heatmap_id, 'heatmap_ids should match');
-  console.log('PASS: test_get_heatmap_retrieves');
-}
-
-// --- Run all tests ---
-test_heatmap_from_canonical_mutations();
-test_authoritative_always_false();
-test_refresh_regenerates();
-test_source_mutation_ids_preserved();
-test_get_heatmap_retrieves();
-console.log('\nAll 5 revision-heatmap-generator tests passed.');
+    const retrieved = getHeatmap(heatmap.heatmap_id);
+    expect(retrieved).toBeDefined();
+    expect(retrieved!.heatmap_id).toBe(heatmap.heatmap_id);
+  });
+});
